@@ -13,7 +13,7 @@ The first step will be to create your own Snowflake Trial Account (our use the o
 Open a Worksheet, copy/paste the following code and execute all. This will set up the GIT repository and will copy everything you will be using during the lab.
 
 ``` sql
-CREATE or replace DATABASE CC_CORTEX_AGENTS_SUMMIT;
+CREATE or replace DATABASE CC_CORTEX_AGENTS_RBAC;
 
 CREATE OR REPLACE API INTEGRATION git_api_integration
   API_PROVIDER = git_https_api
@@ -33,7 +33,7 @@ create or replace stage docs ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE') DIRECTORY = (
 -- Copy the docs for bikes
 COPY FILES
     INTO @docs/
-    FROM @CC_CORTEX_AGENTS_SUMMIT.PUBLIC.git_repo/branches/main/docs/;
+    FROM @CC_CORTEX_AGENTS_RBAC.PUBLIC.git_repo/branches/main/docs/;
 
 ALTER STAGE docs REFRESH;
 
@@ -372,7 +372,7 @@ create or replace stage semantic_files ENCRYPTION = (TYPE = 'SNOWFLAKE_SSE') DIR
 
 COPY FILES
     INTO @semantic_files/
-    FROM @CC_CORTEX_AGENTS_SUMMIT.PUBLIC.git_repo/branches/main/
+    FROM @CC_CORTEX_AGENTS_RBAC.PUBLIC.git_repo/branches/main/
     FILES = ('semantic.yaml', 'semantic_search.yaml');
 ```
 

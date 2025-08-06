@@ -3,7 +3,7 @@ description: 'The data model consists of three core tables: DIM_ARTICLE, which s
 tables:
   - name: DIM_ARTICLE
     base_table:
-      database: CC_CORTEX_AGENTS_SUMMIT
+      database: CC_CORTEX_AGENTS_RBAC
       schema: PUBLIC
       table: DIM_ARTICLE
     dimensions:
@@ -108,7 +108,7 @@ tables:
         - ARTICLE_ID
   - name: DIM_CUSTOMER
     base_table:
-      database: CC_CORTEX_AGENTS_SUMMIT
+      database: CC_CORTEX_AGENTS_RBAC
       schema: PUBLIC
       table: DIM_CUSTOMER
     dimensions:
@@ -210,7 +210,7 @@ tables:
         - CUSTOMER_ID
   - name: FACT_SALES
     base_table:
-      database: CC_CORTEX_AGENTS_SUMMIT
+      database: CC_CORTEX_AGENTS_RBAC
       schema: PUBLIC
       table: FACT_SALES
     dimensions:
