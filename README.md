@@ -22,7 +22,7 @@ CREATE OR REPLACE API INTEGRATION git_api_integration
 
 CREATE OR REPLACE GIT REPOSITORY git_repo
     api_integration = git_api_integration
-    origin = 'https://github.com/ccarrero-sf/cortex_agents_summit';
+    origin = 'https://github.com/ccarrero-sf/cortex_agents_rbac';
 
 -- Make sure we get the latest files
 ALTER GIT REPOSITORY git_repo FETCH;
