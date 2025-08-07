@@ -716,4 +716,72 @@ Now that we have the tools ready, we can create our first App that leverages Cor
 
 ## Step 5: Setup Snowflake Intelligence Agents
 
+Now we have the tools that will be providing context to the Agents we are going to build. First let's create one Agent that will be able to answer questions about all our procucts, from sales to product specifications.
+
+In Snowsight, on the left hand navigation menu, select AI & ML and Agents:
+
+![image](img/9_agents.png)
+
+Click on Create agent.
+
+The first agent, will be ablle to see all data, name it:
+
+![image](img/10_create_agent.png)
+
+Click on the ALL_DATA_AGENT just created. 
+
+We have now an empty agent where we are going to start adding instructions, tools to be used (all what we have already created), planning instructions and roles to be used:
+
+![image](img/11_all_data_agent.png)
+
+Click on Edit.
+
+- About: 
+
+Here we have the name of the Agent the user is going to see and the description we want to provide.
+
+- Instructions: 
+
+Here you instruct the agent how to respond. Think about how you should teach an agent to do their work and what you expect. For example, we have information about guarantee of our products, but as it is in different formats, we are going to ask the Agent to always provide tha information in days:
+
+"When being asked about guarantee information always provide it in days"
+
+You can also provide some sample questions to help your users to use the Agent.
+
+Some examples:
+
+"What is the guarantee of the Premium bike?"
+"What is the bike with most sales revenue during last year and what is their guarantee?"
+"What is the ski product with highest sales and what is the one with lowest sales and what are their differences?"
+
+- Tools: 
+
+Here we are going to add the Cortex Analyst and Cortex Search Services we have already created. These are the powerful tools the Agent will be using to get context for the questions received.
+
+Cortex Analyst: Select the semantic_search_yaml file, the warehouse that will be used to run the queries and provide a description of the tool. You can also generate the description with Cortex:
+
+![image](img/12_cortex_analyst_tool.png)
+
+Cortex Search Service: Add a name, description and select the DOCUMENTATION_TOOL Service we had created before
+
+![image](img/13_cortex_search_tool.png)
+
+- Orchestation: 
+
+Here you can provide detailed instructions to the Agent about how to work. This is the place to teach your agent how to work and think. 
+
+- Access:
+
+Add the ROLES here that will be able to use this agent. For this one we are going to add the BIKE_SNOW_ROLE:
+
+![image](img/14_access.png)
+
+Finally click on Save.
+
+Once you have configured your agent, you can test how it works before providing it to your users
+
+![image](img/15_agent_configured.png)
+
+
+
 
