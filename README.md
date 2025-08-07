@@ -121,7 +121,7 @@ insert into DOCS_CHUNKS_TABLE (relative_path, chunk, chunk_index)
 SELECT * FROM DOCS_CHUNKS_TABLE;
 ```
 
-As a demo, we are going to show how CLASSIFY_TEXT Cortex function to classify the document type. We have two classes: Bike and Snow, and we will pass the document title and the first chunk of the document to the function
+As a demo, we are going to show how to use AI_CLASSIFY Cortex function to classify the document type. We have two classes: Bike and Snow, and we will pass the document title and the first chunk of the document to the function
 
 ```SQL
 CREATE OR REPLACE TEMPORARY TABLE docs_categories AS WITH unique_documents AS (
@@ -135,9 +135,9 @@ CREATE OR REPLACE TEMPORARY TABLE docs_categories AS WITH unique_documents AS (
  docs_category_cte AS (
   SELECT
     relative_path,
-    TRIM(snowflake.cortex.CLASSIFY_TEXT (
+    TRIM(snowflake.cortex.AI_CLASSIFY (
       'Title:' || relative_path || 'Content:' || chunk, ['Bike', 'Snow']
-     )['label'], '"') AS category
+     )['labels'][0], '"') AS CATEGORY
   FROM
     unique_documents
 )
@@ -152,35 +152,68 @@ You can check the categories:
 ```SQL
 select * from docs_categories;
 ```
-And update the table:
+Update the table and define what role can use each type of document:
 
 ```SQL
-update docs_chunks_table 
-  SET category = docs_categories.category
-  from docs_categories
-  where  docs_chunks_table.relative_path = docs_categories.relative_path;
+UPDATE docs_chunks_table dct
+SET
+    category = dc.category,
+    USER_ROLE = CASE
+                    WHEN dc.CATEGORY = 'Bike' THEN 'BIKE_ROLE'
+                    WHEN dc.CATEGORY = 'Snow' THEN 'SNOW_ROLE'
+                    ELSE NULL -- Or a default role if categories other than 'Bike' or 'Snow' are possible
+                END
+FROM
+    docs_categories dc
+WHERE
+    dct.relative_path = dc.relative_path;
 ```
 ### IMAGE Documents
 
-Now let's process the images we have for our bikes and skis. We are going to use the COMPLETE multi-modal function asking for an image description and classification. We will add this information into the DOCS_CHUNKS_TABLE where we also have the PDF documentation:
+Now let's process the images we have for our bikes and skies. We are going to use AI_COMPLETE and AI_CLASSIFY multi-modal function asking for an image description and classification. We add it into the DOCS_CHUNKS_TABLE where we also have the PDF documentation. For AI_COMPLETE for Multi-Modal we are proposing claude-3-7-sonnet, but you should check what is the availability in your [region]( https://docs.snowflake.com/en/sql-reference/functions/ai_complete-single-file). 
+
+We are goign to run the next cell first to enable [CROSS REGION INFERENCE](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cross-region-inference). In our case, this is running within AWS_EU region and we want to keep it there. 
 
 ```SQL
-insert into DOCS_CHUNKS_TABLE (relative_path, chunk, chunk_index, category)
-SELECT 
-    RELATIVE_PATH,
-    CONCAT('This is a picture describing the bike: '|| RELATIVE_PATH || 
-        'THIS IS THE DESCRIPTION: ' ||
-        SNOWFLAKE.CORTEX.COMPLETE('claude-3-5-sonnet',
-        'DESCRIBE THIS IMAGE: ',
-        TO_FILE('@DOCS', RELATIVE_PATH))) as chunk,
-    0,
-    SNOWFLAKE.CORTEX.COMPLETE('claude-3-5-sonnet',
-        'Classify this image, respond only with Bike or Snow: ',
-        TO_FILE('@DOCS', RELATIVE_PATH)) as category,
-FROM 
-    DIRECTORY('@DOCS')
-WHERE
-    RELATIVE_PATH LIKE '%.jpeg';
+ALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'AWS_EU';
+```
+
+```SQL
+INSERT INTO DOCS_CHUNKS_TABLE (relative_path, scoped_file_url, chunk, chunk_index, category, USER_ROLE)
+WITH classified_docs AS (
+    SELECT
+        RELATIVE_PATH,
+        build_scoped_file_url(@docs, relative_path) as scoped_file_url,
+        CONCAT('This is a picture describing: ' || RELATIVE_PATH ||
+            ' .THIS IS THE DESCRIPTION: ' ||
+            SNOWFLAKE.CORTEX.AI_COMPLETE('claude-3-5-sonnet',
+            'This should be an image of a bike or snow gear. Provide all the detail that
+            you can. Try to extract colors, brand names, parts, etc: ',
+            TO_FILE('@DOCS', RELATIVE_PATH))) AS chunk,
+        0 AS chunk_index,
+        -- Calculate category once
+        SNOWFLAKE.CORTEX.AI_CLASSIFY(
+            TO_FILE('@DOCS', RELATIVE_PATH),
+            ['Bike', 'Snow']):labels[0] AS category
+    FROM
+        DIRECTORY('@DOCS')
+    WHERE
+        RELATIVE_PATH LIKE '%.jpeg'
+)
+SELECT
+    cd.relative_path,
+    cd.scoped_file_url,
+    cd.chunk,
+    cd.chunk_index,
+    cd.category,
+    -- Use the calculated category to derive USER_ROLE
+    CASE
+        WHEN cd.category LIKE '%Bike%' THEN 'BIKE_ROLE'
+        WHEN cd.category LIKE '%Snow%' THEN 'SNOW_ROLE'
+        ELSE NULL -- Or a default role if categories other than 'Bike' or 'Snow' are possible
+    END AS USER_ROLE
+FROM
+    classified_docs cd;
 ```
 
 Check the descriptions created and that the Tool that will be used to retrieve information when needed:
@@ -190,16 +223,55 @@ select * from DOCS_CHUNKS_TABLE
     where RELATIVE_PATH LIKE '%.jpeg';
 ```
 
+At this point we should have only 2 roles. Check:
+
+```SQL
+select distinct(USER_ROLE) from DOCS_CHUNKS_TABLE;
+```
+### Setup Roles
+
+We are going to have three different roles. One that can get access to only BIKE info, other to SNOW info and the third one that can access all. We also create three users:
+
+```SQL
+create role if not exists BIKE_ROLE;
+create role if not exists SNOW_ROLE;
+create role if not exists BIKE_SNOW_ROLE;
+
+GRANT ROLE BIKE_ROLE TO ROLE ACCOUNTADMIN;
+GRANT ROLE SNOW_ROKE TO ROLE ACCOUNTADMIN;
+GRANT ROLE BIKE_SNOW_ROLE TO ROLE ACCOUNTADMIN;
+
+CREATE USER IF NOT EXISTS bike_user PASSWORD = 'Password123!' DEFAULT_ROLE = BIKE_ROLE;
+grant role BIKE_ROLE to user bike_user;
+
+CREATE USER IF NOT EXISTS snow_user PASSWORD = 'Password123!' DEFAULT_ROLE = SNOW_ROLE;
+grant role SNOW_ROLE to user snow_user;
+
+CREATE USER IF NOT EXISTS all_user PASSWORD = 'Password123!' DEFAULT_ROLE = BIKE_SNOW_ROLE;
+grant role BIKE_SNOW_ROLE to user all_user;
+```
+
+Grant each role to the current user:
+
+```python
+current_user = session.get_current_user()
+
+for role in ['BIKE_ROLE', 'SNOW_ROLE', 'BIKE_SNOW_ROLE']:
+    session.sql(f'grant role {role} to user {current_user}').collect()
+```
+
 ### Enable Cortex Search Service
 
 Now that we have processed the PDF and IMAGE documents, we can create a [Cortex Search Service](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview) that automatically will create embeddings and indexes over the chunks of text extracted. Read the docs for the different embedding models available.
 
 When creating the service, we also specify what is the TARGET_LAG. This is the frequency used by the service to maintain the service with new or deleted data. Check the [Automatic Processing of New Documents](https://quickstarts.snowflake.com/guide/ask_questions_to_your_own_documents_with_snowflake_cortex_search/index.html?index=..%2F..index#6) of that quickstart to understand how easy is to maintain your RAG updated when using Cortex Search.
 
+We also want to limit what documents can be accessed depending on the role being used. We have two options here, we could filter the role at the Agent level as user_role is being defined as one ATTRIBUTE, or we could filter when creating the service for each role. We are going to try this, where we keep one single table but create different Cortex Search Services depending on the role:
+
 ```SQL
 create or replace CORTEX SEARCH SERVICE DOCUMENTATION_TOOL
 ON chunk
-ATTRIBUTES relative_path, category
+ATTRIBUTES category, user_role
 warehouse = COMPUTE_WH
 TARGET_LAG = '1 hour'
 EMBEDDING_MODEL = 'snowflake-arctic-embed-l-v2.0'
@@ -207,10 +279,86 @@ as (
     select chunk,
         chunk_index,
         relative_path,
-        category
+        scoped_file_url,
+        category,
+        user_role
     from docs_chunks_table
 );
 ```
+
+One service for Bikes:
+
+```SQL
+create or replace CORTEX SEARCH SERVICE DOCUMENTATION_TOOL_BIKES
+ON chunk
+ATTRIBUTES category, user_role
+warehouse = COMPUTE_WH
+TARGET_LAG = '1 hour'
+EMBEDDING_MODEL = 'snowflake-arctic-embed-l-v2.0'
+as (
+    select chunk,
+        chunk_index,
+        relative_path,
+        scoped_file_url,
+        category,
+        user_role
+    from docs_chunks_table
+    where user_role = 'BIKE_ROLE'
+);
+```
+
+And one service for Ski:
+
+```SQL
+create or replace CORTEX SEARCH SERVICE DOCUMENTATION_TOOL_SNOW
+ON chunk
+ATTRIBUTES category, user_role
+warehouse = COMPUTE_WH
+TARGET_LAG = '1 hour'
+EMBEDDING_MODEL = 'snowflake-arctic-embed-l-v2.0'
+as (
+    select chunk,
+        chunk_index,
+        relative_path,
+        scoped_file_url,
+        category,
+        user_role
+    from docs_chunks_table
+    where user_role = 'SNOW_ROLE'
+);
+```
+
+Now we are going to grant access to those services to the different roles:
+
+```SQL
+USE ROLE ACCOUNTADMIN;
+
+-- BIKE_ROLE:
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE BIKE_ROLE;
+GRANT usage ON WAREHOUSE COMPUTE_WH TO ROLE BIKE_ROLE;
+
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE BIKE_ROLE;
+
+GRANT USAGE ON CORTEX SEARCH SERVICE DOCUMENTATION_TOOL_BIKES TO ROLE BIKE_ROLE;
+
+--- SNOW_ROLE:
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE SNOW_ROLE;
+GRANT usage ON WAREHOUSE COMPUTE_WH TO ROLE SNOW_ROLE;
+
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE SNOW_ROLE;
+
+GRANT USAGE ON CORTEX SEARCH SERVICE DOCUMENTATION_TOOL_SNOW TO ROLE SNOW_ROLE;
+
+-- BIKE_SNOW_ROLE:
+
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE BIKE_SNOW_ROLE;
+GRANT usage ON WAREHOUSE COMPUTE_WH TO ROLE BIKE_SNOW_ROLE;
+
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE BIKE_SNOW_ROLE;
+
+GRANT USAGE ON CORTEX SEARCH SERVICE DOCUMENTATION_TOOL TO ROLE BIKE_SNOW_ROLE;
+```
+
 
 If you have run these steps via the Notebook (recommended so you avoid copy/paste) you now have a cell for the the tool API.
 
@@ -292,6 +440,47 @@ VALUES
 (8, 'Racing Fast Skis', 'Skis', 'RacerX', 'Grey', 950);
 ```
 
+Here we are going to create a mapping table to define what ROLES can access what product categories.
+
+```SQL
+CREATE OR REPLACE TABLE ROW_ACCESS_MAPPING(
+    ALLOWED_CATEGORY STRING,
+    ALLOWED_ROLE STRING
+);
+
+INSERT INTO ROW_ACCESS_MAPPING (ALLOWED_CATEGORY, ALLOWED_ROLE)
+VALUES
+('Bike', 'BIKE_ROLE'),
+('Ski Boots', 'SNOW_ROLE'),
+('Skis', 'SNOW_ROLE'),
+('Bike', 'BIKE_SNOW_ROLE'),
+('Ski Boots', 'BIKE_SNOW_ROLE'),
+('Skis', 'BIKE_SNOW_ROLE')
+;
+```
+
+ We also define the Row Access Policies:
+
+```SQL
+CREATE OR REPLACE ROW ACCESS POLICY categories_policy
+AS (ARTICLE_CATEGORY varchar) RETURNS BOOLEAN ->
+    'ACCOUNTADMIN' = current_role()
+    or exists(
+        select * from ROW_ACCESS_MAPPING
+            where allowed_role = current_role()
+            and allowed_category = ARTICLE_CATEGORY
+    );
+```
+
+Apply it to the DIM_ARTICLE table:
+
+```SQL
+ALTER TABLE DIM_ARTICLE
+  ADD ROW ACCESS POLICY categories_policy
+  ON (ARTICLE_CATEGORY);
+```
+
+
 Data for Customers:
 
 ```SQL
@@ -367,6 +556,68 @@ JOIN TABLE(GENERATOR(ROWCOUNT => 10000)) ON TRUE
 ORDER BY DATE_SALES;
 ```
 
+Assign those bojects to the roles we have created:
+
+```SQL
+-- BIKE_ROLE:
+
+GRANT USAGE ON DATABASE CC_CORTEX_AGENTS_RBAC TO ROLE BIKE_ROLE;
+GRANT USAGE ON SCHEMA PUBLIC TO ROLE BIKE_ROLE;
+GRANT SELECT ON TABLE DIM_ARTICLE TO ROLE BIKE_ROLE;
+GRANT SELECT ON TABLE DIM_CUSTOMER TO ROLE BIKE_ROLE;
+GRANT SELECT ON TABLE FACT_SALES TO ROLE BIKE_ROLE;
+
+--- SNOW_ROLE:
+
+GRANT USAGE ON DATABASE CC_CORTEX_AGENTS_RBAC TO ROLE SNOW_ROLE;
+GRANT USAGE ON SCHEMA PUBLIC TO ROLE SNOW_ROLE;
+GRANT SELECT ON TABLE DIM_ARTICLE TO ROLE SNOW_ROLE;
+GRANT SELECT ON TABLE DIM_CUSTOMER TO ROLE SNOW_ROLE;
+GRANT SELECT ON TABLE FACT_SALES TO ROLE SNOW_ROLE;
+
+-- BIKE_SNOW_ROLE:
+
+GRANT USAGE ON DATABASE CC_CORTEX_AGENTS_RBAC TO ROLE BIKE_SNOW_ROLE;
+GRANT USAGE ON SCHEMA PUBLIC TO ROLE BIKE_SNOW_ROLE;
+GRANT SELECT ON TABLE DIM_ARTICLE TO ROLE BIKE_SNOW_ROLE;
+GRANT SELECT ON TABLE DIM_CUSTOMER TO ROLE BIKE_SNOW_ROLE;
+GRANT SELECT ON TABLE FACT_SALES TO ROLE BIKE_SNOW_ROLE;
+```
+
+You can switch the ROLE and test how RBAC works:
+
+```SQL
+USE ROLE SNOW_ROLE;
+WITH yearly_sales AS (
+  SELECT
+    f.article_id,
+    SUM(f.total_price) AS total_sales
+  FROM
+    fact_sales AS f
+  WHERE
+    DATE_PART('year', f.date_sales) = 2025
+  GROUP BY
+    f.article_id
+)
+SELECT
+  a.article_name,
+  a.article_category,
+  a.article_brand,
+  ys.total_sales
+FROM
+  yearly_sales AS ys
+  INNER JOIN dim_article AS a ON ys.article_id = a.article_id
+ORDER BY
+  ys.total_sales DESC NULLS LAST
+```
+
+Switch back to the ACCOUNTADMIN ROLE you are using:
+
+```SQL
+use role ACCOUNTADMIN;
+```
+
+
 In the next section, you are going to explore the Semantic File. We have prepared two files that you can copy from the GIT repository:
 
 ```SQL
@@ -376,6 +627,14 @@ COPY FILES
     INTO @semantic_files/
     FROM @CC_CORTEX_AGENTS_RBAC.PUBLIC.git_repo/branches/main/
     FILES = ('semantic.yaml', 'semantic_search.yaml');
+```
+
+Grant access to the semantic fole to the ROLES:
+
+```SQL
+GRANT READ, WRITE ON STAGE CC_CORTEX_AGENTS_RBAC.PUBLIC.SEMANTIC_FILES TO ROLE BIKE_ROLE;
+GRANT READ, WRITE ON STAGE CC_CORTEX_AGENTS_RBAC.PUBLIC.SEMANTIC_FILES TO ROLE SNOW_ROLE;
+GRANT READ ON STAGE CC_CORTEX_AGENTS_RBAC.PUBLIC.SEMANTIC_FILES TO ROLE BIKE_SNOW_ROLE;
 ```
 
 ## Step 4: Explore/Create the Semantic Model to be used by Cortex Analyst Tool
@@ -420,15 +679,20 @@ You may have an answer like this:
 Let's see what happens when we integrate the ARTICLE_NAME dimension with the Cortex Search Service we created in the Notebook (_ARTICLE_NAME_SEARCH). If you haven't run it already in the Notebook, this is the code to be executed:
 
 ```SQL
+CREATE OR REPLACE TABLE ARTICLE_NAMES AS
+  SELECT
+      DISTINCT ARTICLE_NAME AS ARTICLE_NAME
+  FROM DIM_ARTICLE;
+
 CREATE OR REPLACE CORTEX SEARCH SERVICE _ARTICLE_NAME_SEARCH
   ON ARTICLE_NAME
   WAREHOUSE = COMPUTE_WH
-  TARGET_LAG = '1 hour'
+  TARGET_LAG = '1 day'
   EMBEDDING_MODEL = 'snowflake-arctic-embed-l-v2.0'
 AS (
   SELECT
-      DISTINCT ARTICLE_NAME
-  FROM DIM_ARTICLE
+       ARTICLE_NAME
+  FROM ARTICLE_NAMES
 );
 ```
 In the UI:
@@ -450,122 +714,6 @@ Notice that now Cortex Analyst is able to provide the right answer because of th
 
 Now that we have the tools ready, we can create our first App that leverages Cortex Agents API.
 
-## Step 5: Setup Streamlit App that uses Cortex Agents API
-
-Create one Streamlit App that uses the [Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents) API.
-
-We are going to leverate this initial code:
-
-[streamlit_app.py](https://github.com/ccarrero-sf/cortex_agents_summit/blob/main/streamlit_app.py)
-
-Click on Projects -> Streamlit -> Streamlit App and "Create from repository":
-
-![image](img/9_create_app.png)
-
-Select the streamlit_app.py file:
-
-![image](img/10_select_file.png)
-
-And click on Create.
-
-## Step 6: Explore the App
-
-Open the Streamlit App and try some of these questions:
-
-### Unstructured data questions
-
-These are questions where the answers can be found in the PDF documents. For example:
-
-- **What is the guarantee of the premium bike?**
-
-![image](img/10_2_unstructured_questions.png)
-
-The streamlit_app.py code contains a display_citations() function as an example to show what pieces of information the Cortex Agent used to answer the questions. In this case we can see how it cites the warranty information extracted from the PDF file. 
-
-Try other questions:
-
-- **What is the length of the carver skis?**
-
-![image](img/10_2_carvers.png)
-
-Since we have processed images, the extracted descriptions can also be used by Cortex Agents to answer questions. Here's one example:
-
-- **Is there any brand in the frame of the downhill bike?**
-
-![image](img/10_2_santa_cruz.png)
-
-Fell free to explore the PDF documents and IMAGES files and ask your own questions
-
-### Structured data questions
-
-These are analytical questions where the answers can be found in Snowflake Tables. Some examples:
-
-- How much are we selling for the carvers per year for the North region?
-
-Notice that for this query, all 3 tables are used. Also Cortex Search integration in the semantic model understand that the article name is "Carver Skis":
-
-![image](img/11_carver_query.png)
-
-- How much infant bike are we selling per month?
-- What are the top 5 customers buying the carvers?
-
-Observe the behavior of the following questions:
-
-- What are the monthly sales via online for the racing fast in central?
-
-Cortex Agents API sends the request to Cortex Analyst, but it is not able to filter by customer_region:
-
-![image](img/14_central_question.png)
-
-If we take a look at the [semantic file](https://github.com/ccarrero-sf/cortex_agents_summit/blob/main/semantic_search.yaml) we can see that 'central' is not included as a sample value:
-
-```code
-      - name: CUSTOMER_REGION
-        expr: CUSTOMER_REGION
-        data_type: VARCHAR(16777216)
-        sample_values:
-          - North
-          - South
-          - East
-        description: Geographic region where the customer is located.
-```
-
-This would be a good opportunity to fine tune the semantic model. Either adding all possible values if there aren't many or use Cortex Search as we have done before for the ARTICLE column.
-
-
-## Step 7: Understand the Cortex Agents API
-
-When calling the [Cortex Agents](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents) API, we define the tools the Agent can use in that call. You can read the simple [Streamlit App](https://github.com/ccarrero-sf/cortex_agents_summit/blob/main/streamlit_app.py) you set up to understand the basics before trying to create something more elaborate.
-
-We define the API_ENDPOINT for the Agent, and how to access the different tools we are going to use. In this lab we have two Cortex Search Services to retrieve information from PDFs about bikes and skis, and one Cortex Analyst Service to retrieve analytical information from Snowflake tables.
-
-The Cortex Search Services point to the Services that we created in the Notebook. The Cortex Analyst uses the semantic model we verified earlier.
-
-![image](img/12_api_1.png)
-
-Those services are added to the payload we send to the Cortex Agents API. We define the model we want to use to build the final response, the tools to be used and any specific instructions for building the response:
-
-![image](img/13_api_2.png)
-
-
-## Step 8: Optional: Integrate Cortex Agents API with Slack
-
-[This guide: Getting Started with Cortex Agents and Slack](https://quickstarts.snowflake.com/guide/integrate_snowflake_cortex_agents_with_slack/index.html?index=..%2F..index#0) provides instructions to integrate Cortex Agents with Slack. We are going to debrief it here step by step for the Tools you have created in this hands-on lab.
-
-Follow the instructions from [this repository](https://github.com/ccarrero-sf/cortex_agents_summit_slack) to continue with this lab
-
-## Step 9: Optional - Setup Cortex Agents Demo Env
-
-[Cortex Agents in Snowflake](https://github.com/michaelgorkow/snowflake_cortex_agents_demo/) is an excellent Git repository developed by **Michael Gorkow** that using GIT integration provides an automatic setup to develop several use cases. It will automatically create a Streamlit App where you can select what tools you want to use.
-
-It also includes several use cases for you to try. After running this HOL where you should have an understanding of how to use the different tools and APIs, this is a great Demo to run.
-
-
-
-
-
-
-
-
+## Step 5: Setup Snowflake Intelligence Agents
 
 
