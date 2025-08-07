@@ -41,7 +41,7 @@ ALTER STAGE docs REFRESH;
 
 ## Step 2: Setup Unstructured Data Tools to be Used by the Agent
 
-We are going to be using a Snowflake Notebook to set up the Tools that will be used by the Snowflake Cortex Agents API. Open the Notebook and follow each of the cells.
+We are going to be using a Snowflake Notebook to set up the Tools that will be used by the Snowflake Cortex Agents. Open the Notebook and follow each of the cells.
 
 Select the Notebook that you have available in your Snowflake account within the Git Repositories:
 
@@ -85,14 +85,16 @@ SELECT * FROM RAW_TEXT;
 
 Next we are going to split the content of the PDF file into chunks with some overlaps to make sure information and context are not lost. You can read more about token limits and text splitting in the [Cortex Search Documentation ](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)
 
-Create the table that will be used by Cortex Search Service as a Tool for Cortex Agents in order to retrieve information from PDF and JPEG files:
+Create the table that will be used by Cortex Search Service as a Tool for Cortex Agents in order to retrieve information from PDF and JPEG files. Note we are addig a USER_ROLE column that we are going to use to filter who can get access to that information:
 
 ```SQL
 create or replace TABLE DOCS_CHUNKS_TABLE ( 
     RELATIVE_PATH VARCHAR(16777216), -- Relative path to the PDF file
+    scoped_file_url VARCHAR(16777216),
     CHUNK VARCHAR(16777216), -- Piece of text
     CHUNK_INDEX INTEGER, -- Index for the text
-    CATEGORY VARCHAR(16777216) -- Will hold the document category to enable filtering
+    USER_ROLE VARCHAR(16777216), -- Role that can access to this row
+    CATEGORY VARCHAR(16777216)
 );
 ```
 
