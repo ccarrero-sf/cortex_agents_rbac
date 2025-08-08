@@ -4,9 +4,9 @@ This lab will explain step by step how to build a Data Agent using Snowflake Cor
 
 First step will be to build the Tools that will be provided to the Data Agent in order to do the work. Snowflake provides two very powerful tools in order to use Structured and Unstructured data: Cortex Analyst and Cortex Search.
 
-A custom and unique dataset about bikes and ski will be used by this setup, but you should be able to use your own data. This artificial dataset's goal is to make sure that we are using data not available on the Internet, so no LLM will be able to know about our own data.
+A custom and unique dataset about bikes and skis will be used by this setup, but you should be able to use your own data. This artificial dataset's goal is to make sure that we are using data not available on the Internet, so no LLM will be able to know about our own data.
 
-The first step will be to create your own Snowflake Trial Account (our use the one provided for you during this hands-on lab). Once you have created it, you will be using Snowflake GIT integration to get access to all the data that will be needed during this lab.
+The first step will be to create your own Snowflake Trial Account (or use the one provided for you during this hands-on lab). Once you have created it, you will be using Snowflake GIT integration to get access to all the data that will be needed during this lab.
 
 ## Step 1: Setup GIT Integration 
 
@@ -51,9 +51,9 @@ Give the notebook a name and run it in a Container using CPUs.
 
 ![image](img/2_run_on_container.png)
 
-you can run the entire Notebook and check each of the cells. This is the explanation for Unstructured Data section.
+You can run the entire Notebook and check each of the cells. This is the explanation for the Unstructured Data section.
 
-Thanks to the GIT integration done in the previous step, the PDF and IMAGE files that we are going to be using have already been copied into your Snowflake account. We are using two sets of documents, one for bikes and other for skis and images for both. 
+Thanks to the GIT integration done in the previous step, the PDF and IMAGE files that we are going to be using have already been copied into your Snowflake account. We are using two sets of documents, one for bikes and another for skis, and images for both. 
 
 Check the content of the directory with documents (PDF and JPEG). Note that this is an internal staging area but it could also be an external S3 location, so there is no need to actually copy the PDFs into Snowflake. 
 
@@ -85,7 +85,7 @@ SELECT * FROM RAW_TEXT;
 
 Next we are going to split the content of the PDF file into chunks with some overlaps to make sure information and context are not lost. You can read more about token limits and text splitting in the [Cortex Search Documentation ](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)
 
-Create the table that will be used by Cortex Search Service as a Tool for Cortex Agents in order to retrieve information from PDF and JPEG files. Note we are addig a USER_ROLE column that we are going to use to filter who can get access to that information:
+Create the table that will be used by Cortex Search Service as a Tool for Cortex Agents in order to retrieve information from PDF and JPEG files. Note we are adding a USER_ROLE column that we are going to use to filter who can get access to that information:
 
 ```SQL
 create or replace TABLE DOCS_CHUNKS_TABLE ( 
@@ -170,9 +170,9 @@ WHERE
 ```
 ### IMAGE Documents
 
-Now let's process the images we have for our bikes and skies. We are going to use AI_COMPLETE and AI_CLASSIFY multi-modal function asking for an image description and classification. We add it into the DOCS_CHUNKS_TABLE where we also have the PDF documentation. For AI_COMPLETE for Multi-Modal we are proposing claude-3-7-sonnet, but you should check what is the availability in your [region]( https://docs.snowflake.com/en/sql-reference/functions/ai_complete-single-file). 
+Now let's process the images we have for our bikes and skis. We are going to use AI_COMPLETE and AI_CLASSIFY multi-modal function asking for an image description and classification. We add it into the DOCS_CHUNKS_TABLE where we also have the PDF documentation. For AI_COMPLETE for Multi-Modal we are proposing claude-3-7-sonnet, but you should check what is the availability in your [region]( https://docs.snowflake.com/en/sql-reference/functions/ai_complete-single-file). 
 
-We are goign to run the next cell first to enable [CROSS REGION INFERENCE](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cross-region-inference). In our case, this is running within AWS_EU region and we want to keep it there. 
+We are going to run the next cell first to enable [CROSS REGION INFERENCE](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cross-region-inference). In our case, this is running within AWS_EU region and we want to keep it there. 
 
 ```SQL
 ALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'AWS_EU';
@@ -216,7 +216,7 @@ FROM
     classified_docs cd;
 ```
 
-Check the descriptions created and that the Tool that will be used to retrieve information when needed:
+Check the descriptions created and the Tool that will be used to retrieve information when needed:
 
 ```SQL
 select * from DOCS_CHUNKS_TABLE
@@ -238,7 +238,7 @@ create role if not exists SNOW_ROLE;
 create role if not exists BIKE_SNOW_ROLE;
 
 GRANT ROLE BIKE_ROLE TO ROLE ACCOUNTADMIN;
-GRANT ROLE SNOW_ROKE TO ROLE ACCOUNTADMIN;
+GRANT ROLE SNOW_ROLE TO ROLE ACCOUNTADMIN;
 GRANT ROLE BIKE_SNOW_ROLE TO ROLE ACCOUNTADMIN;
 
 CREATE USER IF NOT EXISTS bike_user PASSWORD = 'Password123!' DEFAULT_ROLE = BIKE_ROLE;
@@ -360,12 +360,12 @@ GRANT USAGE ON CORTEX SEARCH SERVICE DOCUMENTATION_TOOL TO ROLE BIKE_SNOW_ROLE;
 ```
 
 
-If you have run these steps via the Notebook (recommended so you avoid copy/paste) you now have a cell for the the tool API.
+If you have run these steps via the Notebook (recommended so you avoid copy/paste) you now have a cell for the tool API.
 
 After this step, we have one tool ready to retrieve context from PDF and IMAGE files.
 
 ## Step 3: Set Up Structured Data to be Used by the Agent
-Another Tool that we will provide to the Cortex Agent will be Cortex Analyst, which will provide the capability to extract information from Snowflake Tables. In the API call we will provider the location of a Semantic file that contains information about the business terminology used to describe the data.
+Another Tool that we will provide to the Cortex Agent will be Cortex Analyst, which will provide the capability to extract information from Snowflake Tables. In the API call we will provide the location of a Semantic file that contains information about the business terminology used to describe the data.
 
 First we are going to create some synthetic data about the bike and ski products that we have.
 
@@ -414,7 +414,7 @@ Key Columns:
     SALES_CHANNEL: Sales channel used (e.g., Online, In-Store, Partner).
     PROMOTION_APPLIED: Boolean indicating if the sale involved a promotion or discount.
 
-You can continue executing the Notebook cells to create some syntetic data. 
+You can continue executing the Notebook cells to create some synthetic data. 
 
 First some data for articles:
 
@@ -556,7 +556,7 @@ JOIN TABLE(GENERATOR(ROWCOUNT => 10000)) ON TRUE
 ORDER BY DATE_SALES;
 ```
 
-Assign those bojects to the roles we have created:
+Assign those objects to the roles we have created:
 
 ```SQL
 -- BIKE_ROLE:
@@ -629,7 +629,7 @@ COPY FILES
     FILES = ('semantic.yaml', 'semantic_search.yaml');
 ```
 
-Grant access to the semantic fole to the ROLES:
+Grant access to the semantic file to the ROLES:
 
 ```SQL
 GRANT READ, WRITE ON STAGE CC_CORTEX_AGENTS_RBAC.PUBLIC.SEMANTIC_FILES TO ROLE BIKE_ROLE;
@@ -639,7 +639,7 @@ GRANT READ ON STAGE CC_CORTEX_AGENTS_RBAC.PUBLIC.SEMANTIC_FILES TO ROLE BIKE_SNO
 
 ## Step 4: Explore/Create the Semantic Model to be used by Cortex Analyst Tool
 
-The [semantic model](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst/semantic-model-spec) map business terminology to the database schema and adds contextual meaning. It allows [Cortex Analyst](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst) generate the correct SQL for a question asked in natural language.
+The [semantic model](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst/semantic-model-spec) maps business terminology to the database schema and adds contextual meaning. It allows [Cortex Analyst](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-analyst) to generate the correct SQL for a question asked in natural language.
 
 We have already provided a couple of semantic models for you to explore. 
 
@@ -716,7 +716,7 @@ Now that we have the tools ready, we can create our first App that leverages Cor
 
 ## Step 5: Setup Snowflake Intelligence Agents
 
-Now we have the tools that will be providing context to the Agents we are going to build. First let's create one Agent that will be able to answer questions about all our procucts, from sales to product specifications.
+Now we have the tools that will be providing context to the Agents we are going to build. First let's create one Agent that will be able to answer questions about all our products, from sales to product specifications.
 
 In Snowsight, on the left hand navigation menu, select AI & ML and Agents:
 
@@ -724,7 +724,7 @@ In Snowsight, on the left hand navigation menu, select AI & ML and Agents:
 
 Click on Create agent.
 
-The first agent, will be ablle to see all data, name it:
+The first agent will be able to see all data, name it:
 
 ![image](img/10_create_agent.png)
 
@@ -742,7 +742,7 @@ Here we have the name of the Agent the user is going to see and the description 
 
 - Instructions: 
 
-Here you instruct the agent how to respond. Think about how you should teach an agent to do their work and what you expect. For example, we have information about guarantee of our products, but as it is in different formats, we are going to ask the Agent to always provide tha information in days:
+Here you instruct the agent how to respond. Think about how you should teach an agent to do their work and what you expect. For example, we have information about guarantee of our products, but as it is in different formats, we are going to ask the Agent to always provide that information in days:
 
 "When being asked about guarantee information always provide it in days"
 
@@ -770,7 +770,7 @@ Cortex Search Service: Add a name, description and select the DOCUMENTATION_TOOL
 
 - Orchestation: 
 
-Here you can provide detailed instructions to the Agent about how to work. This is the place to teach your agent how to work and think. As we have documents where information may be disperse, we are going to instruct the agent to verify the document title with something like this:
+Here you can provide detailed instructions to the Agent about how to work. This is the place to teach your agent how to work and think. As we have documents where information may be dispersed, we are going to instruct the agent to verify the document title with something like this:
 
 "When answering product specifications always check you are answering the question for the product the question is asked for. You should look to the document title to identify documents properly."
 
@@ -788,17 +788,17 @@ Once you have configured your agent, you can test how it works before providing 
 
 # Step 6: Test Snowflake Intelligence Access
 
-You can use the ALL_USER that was created before to test that all works well. To access Snowflake Intelligence go to ai.snowflake.com, enter the URL of your account and the user and password. You should be able to see the Agent that has been asigned to the role used by that user:
+You can use the ALL_USER that was created before to test that all works well. To access Snowflake Intelligence go to ai.snowflake.com, enter the URL of your account and the user and password. You should be able to see the Agent that has been assigned to the role used by that user:
 
 ![image](img/16_all_user.png)
 
-We can see how the agent is able to respond to the third question by first using Cortex Analyst tool to identify sales for each bike and them look into Cortex Search to find product specifications. The Agent is able to use all that context and provide an answer:
+We can see how the agent is able to respond to the third question by first using Cortex Analyst tool to identify sales for each bike and then look into Cortex Search to find product specifications. The Agent is able to use all that context and provide an answer:
 
 ![image](img/17_all_user_question.png)
 
 # Step 7: Create one Agent for SNOW_ROLE
 
-Last step is to show how we can crate one Agent that respect RBAC that has been setup. We are going to set it up using Cortex Analyst, where RBAC will be applied and the Cortex Search service for the Snow documentation.
+Last step is to show how we can create one Agent that respects RBAC that has been setup. We are going to set it up using Cortex Analyst, where RBAC will be applied and the Cortex Search service for the Snow documentation.
 
 You can follow the same steps we did before. For the Cortex Search tool, we are going to use the specific Cortex Search Service we created with a filter for just Snow products. But we could also have used only one service and filter it here when adding the tool to the agent:
 
@@ -808,14 +808,14 @@ Grant the usage of this Agent to the SNOW_ROLE:
 
 ![image](img/19_access_role.png)
 
-We have now defined one Agent that will be able to answer questions about sales and produc specifications for our Snow products:
+We have now defined one Agent that will be able to answer questions about sales and product specifications for our Snow products:
 
 ![image](img/20_snow_agent.png)
 
 
 # Step 8: Test Role Base Access Control with Agents
 
-Now go to ai.snowflake.com and login with your SNOW_USER. Test what questiosn can be asked. We can check that this user, has access to the specific Agent we have just created:
+Now go to ai.snowflake.com and login with your SNOW_USER. Test what questions can be asked. We can check that this user has access to the specific Agent we have just created:
 
 ![image](img/21_snow_user_hello.png)
 
@@ -825,7 +825,7 @@ Ask questions to see that only Snow products are returned. If we ask:
 
 You can review the planning steps and results if you click on "Show Details".
 
-In the ouput generated you will only see Snow products.
+In the output generated you will only see Snow products.
 
 ![image](img/22_q1.png)
 
