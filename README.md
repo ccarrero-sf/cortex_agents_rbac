@@ -751,8 +751,10 @@ You can also provide some sample questions to help your users to use the Agent.
 Some examples:
 
 "What is the guarantee of the Premium bike?"
+
 "What is the bike with most sales revenue during last year and what is their guarantee?"
-"What is the ski product with highest sales and what is the one with lowest sales and what are their differences?"
+
+"What is the bike with highest sales and what is the one with lowest sales and what are their differences in their specifications?"
 
 - Tools: 
 
@@ -768,7 +770,9 @@ Cortex Search Service: Add a name, description and select the DOCUMENTATION_TOOL
 
 - Orchestation: 
 
-Here you can provide detailed instructions to the Agent about how to work. This is the place to teach your agent how to work and think. 
+Here you can provide detailed instructions to the Agent about how to work. This is the place to teach your agent how to work and think. As we have documents where information may be disperse, we are going to instruct the agent to verify the document title with something like this:
+
+"When answering product specifications always check you are answering the question for the product the question is asked for. You should look to the document title to identify documents properly."
 
 - Access:
 
@@ -781,6 +785,61 @@ Finally click on Save.
 Once you have configured your agent, you can test how it works before providing it to your users
 
 ![image](img/15_agent_configured.png)
+
+# Step 6: Test Snowflake Intelligence Access
+
+You can use the ALL_USER that was created before to test that all works well. To access Snowflake Intelligence go to ai.snowflake.com, enter the URL of your account and the user and password. You should be able to see the Agent that has been asigned to the role used by that user:
+
+![image](img/16_all_user.png)
+
+We can see how the agent is able to respond to the third question by first using Cortex Analyst tool to identify sales for each bike and them look into Cortex Search to find product specifications. The Agent is able to use all that context and provide an answer:
+
+![image](img/17_all_user_question.png)
+
+# Step 7: Create one Agent for SNOW_ROLE
+
+Last step is to show how we can crate one Agent that respect RBAC that has been setup. We are going to set it up using Cortex Analyst, where RBAC will be applied and the Cortex Search service for the Snow documentation.
+
+You can follow the same steps we did before. For the Cortex Search tool, we are going to use the specific Cortex Search Service we created with a filter for just Snow products. But we could also have used only one service and filter it here when adding the tool to the agent:
+
+![image](img/18_cortex_search_snow.png)
+
+Grant the usage of this Agent to the SNOW_ROLE:
+
+![image](img/19_access_role.png)
+
+We have now defined one Agent that will be able to answer questions about sales and produc specifications for our Snow products:
+
+![image](img/20_snow_agent.png)
+
+
+# Step 8: Test Role Base Access Control with Agents
+
+Now go to ai.snowflake.com and login with your SNOW_USER. Test what questiosn can be asked. We can check that this user, has access to the specific Agent we have just created:
+
+![image](img/21_snow_user_hello.png)
+
+Ask questions to see that only Snow products are returned. If we ask:
+
+"What is the month by month revenue growth for each of the products that we sell?"
+
+You can review the planning steps and results if you click on "Show Details".
+
+In the ouput generated you will only see Snow products.
+
+![image](img/22_q1.png)
+
+Now that we have the results, we can ask a follow up question where in this case product specifications will be needed:
+
+"What are the product specifications difference for the product with highest growth and the product with lowest growth during December last year?"
+
+We can try to ask a question about Bikes, but as this agent does not have access to that information it will not be able to provide an answer. In this example, it provides the information has been able to find about Snow products:
+
+![image](img/23_q2.png)
+
+Now you can follow the same steps to create one Agent for Bike products only and assign it to the BIKE_ROLE, so users with that role will be able to use it with ai.snowflake.com
+
+Enjoy!.-
 
 
 
