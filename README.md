@@ -67,20 +67,26 @@ To parse the documents, we are going to use the native Cortex [PARSE_DOCUMENT](h
 ```SQL
 
 CREATE OR REPLACE TEMPORARY TABLE RAW_TEXT AS
+WITH FILE_TABLE as (
+  (SELECT 
+        RELATIVE_PATH,
+        build_scoped_file_url(@docs, relative_path) as scoped_file_url,
+        TO_FILE('@DOCS', RELATIVE_PATH) AS docs 
+    FROM 
+        DIRECTORY(@DOCS))
+)
 SELECT 
     RELATIVE_PATH,
+    scoped_file_url,
     TO_VARCHAR (
-        SNOWFLAKE.CORTEX.PARSE_DOCUMENT (
-            '@DOCS',
-            RELATIVE_PATH,
+        SNOWFLAKE.CORTEX.AI_PARSE_DOCUMENT (
+            docs,
             {'mode': 'LAYOUT'} ):content
         ) AS EXTRACTED_LAYOUT 
 FROM 
-    DIRECTORY('@DOCS')
+    FILE_TABLE
 WHERE
     RELATIVE_PATH LIKE '%.pdf';
-
-SELECT * FROM RAW_TEXT;
 ```
 
 Next we are going to split the content of the PDF file into chunks with some overlaps to make sure information and context are not lost. You can read more about token limits and text splitting in the [Cortex Search Documentation ](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)
